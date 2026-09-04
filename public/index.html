@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deepgram × Claude × Anam avatar</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: #0e0f12; color: #e8e8ea; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: minmax(280px, 480px) 1fr; gap: 24px; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    #meta { color: #9a9ba3; font-size: 13px; margin-bottom: 12px; }
+    #stage { position: relative; background: #000; border-radius: 12px; overflow: hidden; }
+    video { display: block; width: 100%; aspect-ratio: 9 / 16; max-height: 70vh; background: #000; object-fit: cover; }
+    #stage:fullscreen { border-radius: 0; }
+    #stage:fullscreen video { width: 100%; height: 100%; max-height: none; aspect-ratio: auto; object-fit: contain; }
+    .overlay { position: absolute; right: 10px; bottom: 10px; padding: 6px 10px; font-size: 18px; line-height: 1; background: rgba(0,0,0,.55); color: #fff; opacity: .7; }
+    .overlay:hover { opacity: 1; }
+    .controls { display: flex; gap: 8px; margin: 12px 0; }
+    button { padding: 10px 18px; border: 0; border-radius: 8px; font-size: 15px; cursor: pointer; background: #3b82f6; color: white; }
+    button:disabled { opacity: .4; cursor: default; }
+    #stop { background: #ef4444; }
+    .keys { background: #15171c; border: 1px solid #2a2d36; border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+    .keys-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+    .keys-state { font-size: 12.5px; color: #9a9ba3; }
+    .keys-state.ok { color: #86efac; }
+    .keys-state.missing { color: #fca5a5; }
+    .key-row { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 8px; margin: 6px 0; font-size: 13px; color: #9a9ba3; }
+    .key-row input { width: 100%; padding: 7px 9px; border-radius: 6px; background: #1b1d23; color: #e8e8ea; border: 1px solid #2a2d36; font-size: 13px; font-family: ui-monospace, Menlo, monospace; }
+    .key-row input.saved::placeholder { color: #86efac; font-family: system-ui, sans-serif; }
+    .keys-actions { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+    .keys-msg { font-size: 12.5px; color: #9a9ba3; }
+    .keys-msg.error { color: #fca5a5; }
+    .keys-msg.ok { color: #86efac; }
+    .mic-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; color: #9a9ba3; }
+    .mic-row select { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 6px; background: #1b1d23; color: #e8e8ea; border: 1px solid #2a2d36; }
+    button.small { padding: 6px 10px; font-size: 13px; background: #374151; }
+    #promptFields label { display: block; margin-top: 8px; font-size: 13px; color: #9a9ba3; }
+    #promptFields input { width: 100%; box-sizing: border-box; padding: 8px; margin-top: 4px; border-radius: 6px; background: #1b1d23; color: #e8e8ea; border: 1px solid #2a2d36; font-size: 14px; }
+    .level { height: 6px; background: #1b1d23; border-radius: 3px; margin-top: 8px; overflow: hidden; }
+    #levelBar { height: 100%; width: 0; background: #22c55e; transition: width 60ms linear; }
+    .status { padding: 8px 12px; border-radius: 8px; background: #1b1d23; font-size: 14px; }
+    .status.live { background: #123524; color: #86efac; }
+    .status.error { background: #3b1414; color: #fca5a5; }
+    .status.muted { color: #9a9ba3; }
+    #transcript { background: #15171c; border-radius: 12px; padding: 16px; min-height: 300px; max-height: 75vh; overflow-y: auto; }
+    .line { margin-bottom: 12px; }
+    .who { display: block; font-size: 12px; color: #9a9ba3; margin-bottom: 2px; }
+    .line.user .who { color: #93c5fd; }
+    .line.assistant .who { color: #86efac; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>Deepgram × Claude × Anam avatar</h1>
+      <div id="meta"></div>
+      <section id="keys" class="keys">
+        <div class="keys-head">
+          <strong>API keys</strong>
+          <span id="keysState" class="keys-state">Checking…</span>
+        </div>
+        <label class="key-row"><span>Anam</span><input id="anamKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Anam API key"></label>
+        <label class="key-row"><span>Deepgram</span><input id="deepgramKey" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Deepgram API key"></label>
+        <div class="keys-actions">
+          <button id="saveKeys" class="small">Save keys</button>
+          <span id="keysMsg" class="keys-msg"></span>
+        </div>
+      </section>
+      <div id="stage">
+        <video id="avatar" autoplay playsinline></video>
+        <button id="fullscreen" class="overlay" title="Toggle fullscreen (F)">⛶</button>
+      </div>
+      <div class="mic-row">
+        <label for="avatar-select">Avatar</label>
+        <select id="avatar-select"><option value="">Loading avatars…</option></select>
+      </div>
+      <div class="mic-row">
+        <label for="voice">Voice</label>
+        <select id="voice"><option value="">Loading voices…</option></select>
+        <button id="preview" class="small" title="Hear a sample of this voice">▶</button>
+      </div>
+      <div class="mic-row">
+        <label for="prompt">Character</label>
+        <select id="prompt"></select>
+      </div>
+      <div id="promptFields"></div>
+      <div class="mic-row">
+        <label for="mic">Microphone</label>
+        <select id="mic"><option value="">Allow microphone access to list devices…</option></select>
+        <button id="micPerm" class="small">Allow mic</button>
+      </div>
+      <div class="level"><div id="levelBar"></div></div>
+      <div class="controls">
+        <button id="start">Start conversation</button>
+        <button id="stop" disabled>Stop</button>
+      </div>
+      <div id="status" class="status muted">Idle</div>
+    </section>
+    <section>
+      <div id="transcript"></div>
+    </section>
+  </main>
+  <script src="/vendor/anam.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
