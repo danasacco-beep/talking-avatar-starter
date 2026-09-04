@@ -26,7 +26,7 @@ Nothing here is typed into an AI. You do every step yourself.
 - [ ] **Google Chrome.** Other browsers may work, but the class is tested on Chrome.
 - [ ] **Node.js** version 20 or newer, from https://nodejs.org (choose the "LTS" download). Installed in Step 1 below.
 - [ ] Optional: a **plain-text editor** such as Visual Studio Code (https://code.visualstudio.com), only if you want to write your own characters later.
-- [ ] The project files: `talking-avatar-starter.zip` from your instructor.
+- [ ] The project files: `talking-avatar-app.zip` from your instructor.
 
 ### Vocabulary you will meet
 
@@ -59,7 +59,7 @@ If you see "command not found," close the terminal, open it again, and retry. If
 
 ### Step 2 — Unpack the project
 
-1. Save `talking-avatar-starter.zip` to your **Desktop**.
+1. Save `talking-avatar-app.zip` to your **Desktop**.
 2. Double-click it. You get a folder. Rename that folder to exactly `talking-avatar`.
 3. Open it and check it contains `server.js`, a `public` folder, a `prompts` folder, and a file called `.env.example`.
    - **Can't see `.env.example`?** It's hidden. Mac: press `Cmd + Shift + .` in Finder. Windows: View menu → Show → Hidden items.
@@ -105,15 +105,18 @@ npm install
 npm start
 ```
 
-**You should see** these lines (the two warnings are expected the first time; you'll add the keys in the next step):
+**You should see** exactly these four lines and nothing else:
 
 ```
-[warn] ANAM_API_KEY is not set — paste it on the page or in .env
-[warn] DEEPGRAM_API_KEY is not set — paste it on the page or in .env
-Prompts: mystery-guest
-Avatar app: http://localhost:4400
-LLM: claude-sonnet-5 via Deepgram-brokered Anthropic
+Talking Avatar is running.
+Open this in Chrome:  http://localhost:4400
+Then paste your Anam and Deepgram API keys into the box at the top of the page.
+Press Ctrl+C here to stop.
 ```
+
+The third line is a to-do list for you: it appears only while a key is still missing, so once you
+have saved both keys in Step 7 it stops showing. If instead you see `Port 4400 is already in use`,
+follow the line's own advice — close whatever else is running, or put `PORT=4401` in `.env`.
 
 Leave this terminal window open. The app runs as long as it stays open.
 
@@ -121,7 +124,7 @@ Leave this terminal window open. The app runs as long as it stays open.
 
 1. Open Chrome and go to: **http://localhost:4400**
 2. Chrome asks to use your microphone. Click **Allow**.
-3. At the top of the page is an **API keys** box. Paste your Anam key in the first field and your Deepgram key in the second, then click **Save keys**.
+3. On the right-hand side of the page, the first card is **1 API keys**. Paste your Anam key in the first field and your Deepgram key in the second, then click **Save keys**.
 
 **You should see** "Saved. Keys verified and written to .env." and the label change to "Both keys saved." The Avatar and Voice lists fill in a moment later.
 
@@ -190,7 +193,7 @@ Open `.env`. `SPEAK_MODEL` is the voice (Deepgram lists them at https://develope
 ## For the instructor
 
 - **Before class:** have students create both accounts and verify their email at home. Sign-ups are the slowest part.
-- **Distribute** `talking-avatar-starter.zip`. It contains no keys.
+- **Distribute** `talking-avatar-app.zip`. It contains no keys.
 - **Timing:** Steps 1–2 about 10 minutes, keys 10 minutes, Steps 5–8 about 10 minutes, leaving time to play.
 - **Room setup:** headphones for everyone; a room of open speakers becomes a feedback chorus.
 - **Cost:** Deepgram's free credit covers the class many times over. Anam bills by avatar streaming minutes on its free tier; ask students to press Stop when not talking.

@@ -187,7 +187,7 @@ async function loadConfig() {
   sampleRate = cfg.sampleRate;
   els.meta.textContent = `LLM: ${cfg.thinkModel} (${cfg.thinkVia})`;
   showKeyState(cfg);
-  if (!keysReady) setStatus("Paste your API keys above and click Save keys to begin.", "muted");
+  if (!keysReady) setStatus("Add your API keys to begin", "muted");
   prompts = cfg.prompts;
   els.prompt.innerHTML = "";
   for (const p of prompts) {

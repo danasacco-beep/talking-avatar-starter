@@ -27,8 +27,6 @@ const {
 // which also writes them back to .env so they survive a restart.
 const ENV_PATH = path.join(__dirname, ".env");
 const keys = { anam: process.env.ANAM_API_KEY || "", deepgram: process.env.DEEPGRAM_API_KEY || "" };
-if (!keys.anam) console.warn("[warn] ANAM_API_KEY is not set — paste it on the page or in .env");
-if (!keys.deepgram) console.warn("[warn] DEEPGRAM_API_KEY is not set — paste it on the page or in .env");
 
 function saveKeyToEnv(name, value) {
   let text = "";
@@ -53,7 +51,6 @@ function loadPrompts() {
   });
 }
 let PROMPTS = loadPrompts();
-console.log(`Prompts: ${PROMPTS.map((p) => p.id).join(", ")}`);
 
 // Replace "[KEY — anything]" / "[KEY]" placeholders with the value the user supplied.
 function fillPrompt(text, fields = [], values = {}) {
@@ -328,7 +325,30 @@ wss.on("connection", async (client, req) => {
   });
 });
 
+// A port clash is the most common first-run failure, so it gets a plain-English line instead of a
+// stack trace. The handler has to sit on BOTH objects: ws forwards the http server's "error" event to
+// the WebSocketServer, and that forwarder is registered first — left unhandled it crashes the process
+// before a listener on `server` alone would ever run.
+let listenErrorReported = false;
+function handleListenError(err) {
+  if (listenErrorReported) return;
+  listenErrorReported = true;
+  if (err.code === "EADDRINUSE") {
+    console.error(`Port ${PORT} is already in use. Close the other app, or set PORT=4401 in .env and try again.`);
+    process.exit(1);
+  }
+  throw err;
+}
+wss.on("error", handleListenError);
+server.on("error", handleListenError);
+
+// A novice reads this text as their only signal that the app worked, so it stays short and
+// says what to do next. The keys line appears only while a key is still missing.
 server.listen(PORT, () => {
-  console.log(`Avatar app: http://localhost:${PORT}`);
-  console.log(`LLM: ${THINK_MODEL} via ${ANTHROPIC_API_KEY ? "your Anthropic key" : "Deepgram-brokered Anthropic"}`);
+  console.log("Talking Avatar is running.");
+  console.log(`Open this in Chrome:  http://localhost:${PORT}`);
+  if (!keys.anam || !keys.deepgram) {
+    console.log("Then paste your Anam and Deepgram API keys into the box at the top of the page.");
+  }
+  console.log("Press Ctrl+C here to stop.");
 });

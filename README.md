@@ -14,10 +14,14 @@ browser ◀───────────────────────
 ## Setup
 
 1. `npm install` then `npm start`.
-2. Open http://localhost:4400 and paste your Anam and Deepgram API keys into the **API keys** box at the top.
-   Each key is checked with its provider, kept in memory, and written to `.env` so it survives restarts.
-   (You can also put them in `.env` by hand as `ANAM_API_KEY` and `DEEPGRAM_API_KEY`.)
+2. Open http://localhost:4400 and paste your Anam and Deepgram API keys into the **API keys** card
+   (card 1, top of the right-hand column), then click **Save keys**. This is the normal way to set up:
+   each key is checked with its provider before it is accepted, held in memory, and written to `.env`
+   so it survives a restart. Nothing needs editing by hand and the app never prints your keys.
 3. Click **Start conversation** and allow the microphone.
+
+**Alternative:** if you would rather not use the page, create `.env` yourself (copy `.env.example`) and
+set `ANAM_API_KEY` and `DEEPGRAM_API_KEY`. The page picks them up on the next start.
 
 ## Configuration (`.env`)
 
@@ -28,8 +32,8 @@ browser ◀───────────────────────
 | `ANTHROPIC_API_KEY` | Optional. If set, Deepgram calls Anthropic with your key instead, so any model works (e.g. `claude-opus-5`). |
 | `ANAM_API_KEY` | Avatar rendering. Can be pasted on the page instead. |
 | `ANAM_AVATAR_ID` | Stock avatar. List more with `curl -H "Authorization: Bearer $ANAM_API_KEY" https://api.anam.ai/v1/avatars`. |
-| `SPEAK_MODEL` / `LISTEN_MODEL` | Deepgram voice and STT model. |
-| `GREETING` | What the avatar says when the session opens. |
+| `SPEAK_MODEL` / `LISTEN_MODEL` | Deepgram voice and STT model. Both are only the initial defaults; the page overrides them. |
+| `PORT` | Defaults to 4400. Set `PORT=4401` if something else already has that port. |
 
 ## Avatars
 
@@ -58,7 +62,7 @@ re-read on every page load, so no restart is needed.
 
 ## Agent prompt
 
-`AGENT-PROMPT.md` is a paste-ready brief for another AI agent to rebuild this whole project, with every API shape and gotcha. `INSTALL-GUIDE.md` is the novice class handout, and `talking-avatar-starter.zip` is the keyless bundle to hand out with it.
+`AGENT-PROMPT.md` is a paste-ready brief for another AI agent to rebuild this whole project, with every API shape and gotcha. `INSTALL-GUIDE.md` is the novice class handout, and `talking-avatar-app.zip` is the keyless bundle to hand out with it.
 
 ## Fullscreen
 
