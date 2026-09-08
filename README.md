@@ -62,7 +62,7 @@ re-read on every page load, so no restart is needed.
 
 ## Agent prompt
 
-`AGENT-PROMPT.md` is a paste-ready brief for another AI agent to rebuild this whole project, with every API shape and gotcha. `INSTALL-GUIDE.md` is the novice class handout, and `talking-avatar-app.zip` is the keyless bundle to hand out with it.
+`AGENT-PROMPT.md` is a paste-ready brief for another AI agent to rebuild this whole project, with every API shape and gotcha. `INSTALL-GUIDE.md` is the novice class handout; students get the files themselves from the green **Code → Download ZIP** button at the top of this repo.
 
 ## Fullscreen
 
