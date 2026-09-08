@@ -26,7 +26,7 @@ Nothing here is typed into an AI. You do every step yourself.
 - [ ] **Google Chrome.** Other browsers may work, but the class is tested on Chrome.
 - [ ] **Node.js** version 20 or newer, from https://nodejs.org (choose the "LTS" download). Installed in Step 1 below.
 - [ ] Optional: a **plain-text editor** such as Visual Studio Code (https://code.visualstudio.com), only if you want to write your own characters later.
-- [ ] The project files: `talking-avatar-app.zip` from your instructor.
+- [ ] The project files, downloaded from https://github.com/danasacco-beep/talking-avatar-starter in Step 2 below.
 
 ### Vocabulary you will meet
 
@@ -57,12 +57,16 @@ node -v
 **You should see** a version number starting with `v20`, `v22`, or higher, for example `v22.11.0`.
 If you see "command not found," close the terminal, open it again, and retry. If it still fails, the installer didn't finish; run it again.
 
-### Step 2 — Unpack the project
+### Step 2 — Download the project
 
-1. Save `talking-avatar-app.zip` to your **Desktop**.
-2. Double-click it. You get a folder. Rename that folder to exactly `talking-avatar`.
-3. Open it and check it contains `server.js`, a `public` folder, a `prompts` folder, and a file called `.env.example`.
+1. Go to **https://github.com/danasacco-beep/talking-avatar-starter**
+2. Click the green **Code** button, then **Download ZIP**. You get a file called `talking-avatar-starter-main.zip`.
+3. Move that file to your **Desktop** and double-click it. You get a folder called `talking-avatar-starter-main`.
+4. **Rename that folder to exactly `talking-avatar`.** The commands later in this guide assume that name, so this step is not optional.
+5. Open it and check it contains `server.js`, a `public` folder, a `prompts` folder, and a file called `.env.example`.
    - **Can't see `.env.example`?** It's hidden. Mac: press `Cmd + Shift + .` in Finder. Windows: View menu → Show → Hidden items.
+
+**Prefer git?** `git clone https://github.com/danasacco-beep/talking-avatar-starter.git ~/Desktop/talking-avatar` does the same thing in one line.
 
 ### Step 3 — Get your Anam API key
 
@@ -193,7 +197,7 @@ Open `.env`. `SPEAK_MODEL` is the voice (Deepgram lists them at https://develope
 ## For the instructor
 
 - **Before class:** have students create both accounts and verify their email at home. Sign-ups are the slowest part.
-- **Distribute** `talking-avatar-app.zip`. It contains no keys.
+- **Distribute** the repo link: https://github.com/danasacco-beep/talking-avatar-starter — it contains no keys, only `.env.example` with blank fields.
 - **Timing:** Steps 1–2 about 10 minutes, keys 10 minutes, Steps 5–8 about 10 minutes, leaving time to play.
 - **Room setup:** headphones for everyone; a room of open speakers becomes a feedback chorus.
 - **Cost:** Deepgram's free credit covers the class many times over. Anam bills by avatar streaming minutes on its free tier; ask students to press Stop when not talking.
