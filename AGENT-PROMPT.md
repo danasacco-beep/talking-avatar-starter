@@ -46,9 +46,9 @@ Why a proxy: browsers can't set the `Authorization` header on WebSockets, and th
   },
   "agent": {
     "language": "en",
-    "listen": { "provider": { "type": "deepgram", "model": "nova-3" } },
+    "listen": { "provider": { "type": "deepgram", "model": "flux-general-en", "version": "v2" } },
     "think":  { "provider": { "type": "anthropic", "model": "claude-sonnet-5" }, "prompt": "<system prompt, ≤25,000 chars>" },
-    "speak":  { "provider": { "type": "deepgram", "model": "aura-2-thalia-en" } },
+    "speak":  { "provider": { "type": "deepgram", "model": "flux-kit-en", "version": "v2" } },
     "greeting": "optional fixed opening line, spoken verbatim"
   }
 }
@@ -56,7 +56,8 @@ Why a proxy: browsers can't set the `Authorization` header on WebSockets, and th
 
 - **Brokered Claude models** (no Anthropic key): `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-sonnet-4-5`, `claude-haiku-4-5`. To use your own key or another model (e.g. `claude-opus-5`) add `"endpoint": {"url": "https://api.anthropic.com/v1/messages", "headers": {"x-api-key": "...", "anthropic-version": "2023-06-01"}}` inside `think`.
 - **GOTCHA — do not send `temperature` inside `think.provider` for Anthropic models.** Speech recognition will work, then every turn fails with `{"type":"Error","code":"FAILED_TO_THINK","description":"Failed to think. Please check your agent.think settings."}`. Removing `temperature` fixed it for every model tested.
-- Listen models: `nova-3`/`nova-2` need no version; `flux-general-en` requires `"version": "v2"`. Speak: Aura voices (`aura-2-*-en`) need no version; Flux TTS needs `"version": "v2"`.
+- Listen models: `nova-3`/`nova-2` need no version; `flux-general-en`/`flux-general-multi` require `"version": "v2"` and unlock `eot_threshold`/`eager_eot_threshold`/`eot_timeout_ms` (Flux's model-integrated end-of-turn detection). Speak: Aura voices (`aura-2-*-en`) need no version; Flux TTS voices (`flux-{voice}-en`, e.g. `flux-kit-en`) need `"version": "v2"`.
+- **GOTCHA — Flux TTS voices don't appear in `GET /v1/models`.** That endpoint's `tts` array is Aura-only. Flux TTS's own catalog (36 voices at last count, same `metadata` shape) lives on `GET /v2/models`, alongside the Flux STT models in its `stt` array. Fetch both endpoints and merge if you want a complete voice/model list.
 - **Client → server messages:** binary frames = raw PCM16 mono at the input sample rate; `{"type":"KeepAlive"}` (send every ~8 s); `{"type":"InjectUserMessage","content":"..."}` (acts as if the user said it — use it to make the LLM generate its own in-character opening instead of a fixed greeting); `{"type":"InjectAgentMessage","message":"..."}` (agent speaks a literal string).
 - **Server → client messages** in the order you will see them: `Welcome` → `SettingsApplied` → (greeting) `ConversationText{role:"assistant"}` + binary audio + `AgentAudioDone` → then per turn `UserStartedSpeaking` → `ConversationText{role:"user"}` → `AgentThinking` → `AgentStartedSpeaking` → `ConversationText{role:"assistant"}` (one per sentence) → binary audio → `AgentAudioDone`. Also `History`, `LatencyReport`, `Warning`, `Error`.
 - **GOTCHA:** if you stop sending binary audio, Deepgram closes with `We did not receive audio within our timeout`. The browser mic keeps the stream alive; in Node tests, send 640-byte silence frames every 20 ms.

@@ -77,16 +77,20 @@ async function loadVoices() {
     if (!r.ok) throw new Error(body.error || r.statusText);
     voices = body.voices;
     els.voice.innerHTML = "";
-    const english = document.createElement("optgroup"); english.label = "English";
-    const other = document.createElement("optgroup"); other.label = "Other languages";
+    // Server groups voices by engine (Flux first, then Aura by language); keep that order here.
+    const groups = new Map();
     for (const v of voices) {
+      if (!groups.has(v.group)) {
+        const optgroup = document.createElement("optgroup");
+        optgroup.label = v.group;
+        groups.set(v.group, optgroup);
+        els.voice.appendChild(optgroup);
+      }
       const opt = document.createElement("option");
       opt.value = v.id;
       opt.textContent = v.name;
-      (v.lang.startsWith("en") ? english : other).appendChild(opt);
+      groups.get(v.group).appendChild(opt);
     }
-    els.voice.appendChild(english);
-    if (other.children.length) els.voice.appendChild(other);
     let chosen = body.defaultVoice;
     try { chosen = localStorage.getItem("voice") || chosen; } catch {}
     if (voices.some((v) => v.id === chosen)) els.voice.value = chosen;
