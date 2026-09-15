@@ -189,7 +189,7 @@ function addLine(role, text) {
 async function loadConfig() {
   const cfg = await fetch("/api/config").then((r) => r.json());
   sampleRate = cfg.sampleRate;
-  els.meta.textContent = `LLM: ${cfg.thinkModel} (${cfg.thinkVia})`;
+  els.meta.textContent = `LLM: ${cfg.thinkModel}`;
   showKeyState(cfg);
   if (!keysReady) setStatus("Add your API keys to begin", "muted");
   prompts = cfg.prompts;

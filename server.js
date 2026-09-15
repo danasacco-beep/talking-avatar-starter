@@ -16,7 +16,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const {
   ANAM_AVATAR_ID,
   ANAM_AVATAR_MODEL = "cara-4",
-  ANTHROPIC_API_KEY,
   THINK_MODEL = "claude-sonnet-5",
   SPEAK_MODEL = "flux-kit-en",
   LISTEN_MODEL = "flux-general-en",
@@ -70,18 +69,11 @@ const DEEPGRAM_AGENT_URL = "wss://agent.deepgram.com/v1/agent/converse";
 const SAMPLE_RATE = 16000;
 
 function buildSettings(promptEntry, values, voice = SPEAK_MODEL) {
+  // Deepgram brokers the Anthropic call with its own credentials; there's no bring-your-own-key path.
   const think = {
     provider: { type: "anthropic", model: THINK_MODEL },
     prompt: fillPrompt(promptEntry.text, promptEntry.fields, values),
   };
-  // Default: Deepgram brokers the Anthropic call with its own credentials.
-  // Optional: bring your own Anthropic key to use any model (e.g. claude-opus-5).
-  if (ANTHROPIC_API_KEY) {
-    think.endpoint = {
-      url: "https://api.anthropic.com/v1/messages",
-      headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-    };
-  }
   // Flux STT (flux-general-en / flux-general-multi) runs on the v2 API and adds model-integrated
   // end-of-turn detection; Nova models stay on v1 with none of the eot_* tuning fields.
   const listenProvider = { type: "deepgram", model: LISTEN_MODEL };
@@ -255,7 +247,6 @@ app.get("/api/config", (_req, res) => {
   res.json({
     sampleRate: SAMPLE_RATE,
     thinkModel: THINK_MODEL,
-    thinkVia: ANTHROPIC_API_KEY ? "your Anthropic key" : "Deepgram-brokered Anthropic",
     deepgramConfigured: Boolean(keys.deepgram),
     anamConfigured: Boolean(keys.anam),
     keyHints: { anam: mask(keys.anam), deepgram: mask(keys.deepgram) },

@@ -54,7 +54,8 @@ Why a proxy: browsers can't set the `Authorization` header on WebSockets, and th
 }
 ```
 
-- **Brokered Claude models** (no Anthropic key): `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-sonnet-4-5`, `claude-haiku-4-5`. To use your own key or another model (e.g. `claude-opus-5`) add `"endpoint": {"url": "https://api.anthropic.com/v1/messages", "headers": {"x-api-key": "...", "anthropic-version": "2023-06-01"}}` inside `think`.
+- **Brokered Claude models only** (no Anthropic key, no BYO endpoint support in this project): `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-sonnet-4-5`, `claude-haiku-4-5`. A custom `think.endpoint` is possible in the Voice Agent API generally, but this project intentionally doesn't expose it.
+- **GOTCHA if you ever do add a custom `think.endpoint` for the `anthropic` provider:** do not set an `anthropic-version` header yourself. Deepgram injects it and now rejects the whole `Settings` message with `{"type":"Error","code":"INVALID_SETTINGS","description":"Custom think endpoint can't contain \`anthropic-version\` header"}` if you also send it. Confirmed live against the API; Deepgram's own published example for a custom Anthropic endpoint still shows this header, so don't trust that example.
 - **GOTCHA — do not send `temperature` inside `think.provider` for Anthropic models.** Speech recognition will work, then every turn fails with `{"type":"Error","code":"FAILED_TO_THINK","description":"Failed to think. Please check your agent.think settings."}`. Removing `temperature` fixed it for every model tested.
 - Listen models: `nova-3`/`nova-2` need no version; `flux-general-en`/`flux-general-multi` require `"version": "v2"` and unlock `eot_threshold`/`eager_eot_threshold`/`eot_timeout_ms` (Flux's model-integrated end-of-turn detection). Speak: Aura voices (`aura-2-*-en`) need no version; Flux TTS voices (`flux-{voice}-en`, e.g. `flux-kit-en`) need `"version": "v2"`.
 - **GOTCHA — Flux TTS voices don't appear in `GET /v1/models`.** That endpoint's `tts` array is Aura-only. Flux TTS's own catalog (36 voices at last count, same `metadata` shape) lives on `GET /v2/models`, alongside the Flux STT models in its `stt` array. Fetch both endpoints and merge if you want a complete voice/model list.
@@ -94,7 +95,7 @@ await client.stopStreaming();                             // on Stop
 ## Phase 2 — Server (Node ≥ 20, ESM, `express` + `ws` + `dotenv`)
 
 1. `package.json` with `"type": "module"` and `"start": "node server.js"`. Express 5 works.
-2. `.env` (gitignored) holding `ANAM_API_KEY`, `ANAM_AVATAR_ID`, `ANAM_AVATAR_MODEL=cara-4`, `DEEPGRAM_API_KEY`, `THINK_MODEL=claude-sonnet-5`, optional `ANTHROPIC_API_KEY`, `SPEAK_MODEL`, `LISTEN_MODEL`, `PORT`. Ship a `.env.example`.
+2. `.env` (gitignored) holding `ANAM_API_KEY`, `ANAM_AVATAR_ID`, `ANAM_AVATAR_MODEL=cara-4`, `DEEPGRAM_API_KEY`, `THINK_MODEL=claude-sonnet-5`, `SPEAK_MODEL`, `LISTEN_MODEL`, `PORT`. Ship a `.env.example`.
 3. Routes:
    - `GET /` static `public/`; `GET /vendor/anam.js` static from the SDK's `dist/umd`.
    - `GET /api/config` → sample rate, model, whether Deepgram key is set, and the prompt list (`id`, `name`, `fields`). Re-read prompt files here so edits need no restart.

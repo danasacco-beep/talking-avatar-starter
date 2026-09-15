@@ -35,7 +35,6 @@ set `ANAM_API_KEY` and `DEEPGRAM_API_KEY`. The page picks them up on the next st
 | --- | --- |
 | `DEEPGRAM_API_KEY` | STT, TTS, and the brokered Claude call. Can be pasted on the page instead. |
 | `THINK_MODEL` | Claude model. Brokered by Deepgram: `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-haiku-4-5`. |
-| `ANTHROPIC_API_KEY` | Optional. If set, Deepgram calls Anthropic with your key instead, so any model works (e.g. `claude-opus-5`). |
 | `ANAM_API_KEY` | Avatar rendering. Can be pasted on the page instead. |
 | `ANAM_AVATAR_ID` | Stock avatar. List more with `curl -H "Authorization: Bearer $ANAM_API_KEY" https://api.anam.ai/v1/avatars`. |
 | `SPEAK_MODEL` / `LISTEN_MODEL` | Deepgram TTS voice and STT model. Default to Flux (`flux-kit-en` / `flux-general-en`); set to an Aura voice (e.g. `aura-2-thalia-en`) or Nova model (e.g. `nova-3`) to opt out of Flux. Both are only the initial defaults — the page's Voice dropdown lets you override `SPEAK_MODEL` per session. |
