@@ -16,7 +16,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const {
   ANAM_AVATAR_ID,
   ANAM_AVATAR_MODEL = "cara-4",
-  ANTHROPIC_API_KEY,
   THINK_MODEL = "claude-sonnet-5",
   SPEAK_MODEL = "flux-kit-en",
   LISTEN_MODEL = "flux-general-en",
@@ -70,18 +69,11 @@ const DEEPGRAM_AGENT_URL = "wss://agent.deepgram.com/v1/agent/converse";
 const SAMPLE_RATE = 16000;
 
 function buildSettings(promptEntry, values, voice = SPEAK_MODEL) {
+  // Deepgram brokers the Anthropic call with its own credentials; there's no bring-your-own-key path.
   const think = {
     provider: { type: "anthropic", model: THINK_MODEL },
     prompt: fillPrompt(promptEntry.text, promptEntry.fields, values),
   };
-  // Default: Deepgram brokers the Anthropic call with its own credentials.
-  // Optional: bring your own Anthropic key to use any model (e.g. claude-opus-5).
-  if (ANTHROPIC_API_KEY) {
-    think.endpoint = {
-      url: "https://api.anthropic.com/v1/messages",
-      headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-    };
-  }
   // Flux STT (flux-general-en / flux-general-multi) runs on the v2 API and adds model-integrated
   // end-of-turn detection; Nova models stay on v1 with none of the eot_* tuning fields.
   const listenProvider = { type: "deepgram", model: LISTEN_MODEL };
@@ -107,6 +99,59 @@ function buildSettings(promptEntry, values, voice = SPEAK_MODEL) {
   // Flux TTS voices (flux-{voice}-{lang}) are the v2 API; Aura voices (aura-2-...) default to v1 when version is omitted.
   if (voice.startsWith("flux")) settings.agent.speak.provider.version = "v2";
   if (promptEntry.greeting) settings.agent.greeting = promptEntry.greeting;
+  return settings;
+}
+
+// A pasted Deepgram Playground config replaces buildSettings() output for this session — except
+// the think prompt, which is always the current Character's own compiled prompt with the pasted
+// config's prompt (if any) layered on after it; see prependGamePrompt below. The browser sends the
+// config as the first WebSocket message (not a URL param — prompts alone can run to 25,000
+// characters, well past what a URL/HTTP header can safely carry) instead of raw mic audio. We only
+// sanity-check the shape here; Deepgram's own INVALID_SETTINGS validation catches the rest, and
+// those Error messages already flow back to the browser through the normal proxy path below.
+function receiveClientSettings(client) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      client.removeListener("message", onMessage);
+      reject(new Error("Timed out waiting for the pasted config."));
+    }, 5000);
+    function onMessage(data, isBinary) {
+      clearTimeout(timeout);
+      client.removeListener("message", onMessage);
+      if (isBinary) return reject(new Error("Expected the pasted config as the first message, got audio instead."));
+      let msg;
+      try { msg = JSON.parse(data.toString()); } catch { return reject(new Error("The pasted config isn't valid JSON.")); }
+      const settings = msg?.settings;
+      if (msg?.type !== "ClientSettings" || !settings || typeof settings !== "object") {
+        return reject(new Error("Expected a pasted Playground config."));
+      }
+      if (settings.type !== "Settings" || !settings.agent || typeof settings.agent !== "object") {
+        return reject(new Error('That JSON is missing "type": "Settings" and/or an "agent" object — it doesn\'t look like a Voice Agent config.'));
+      }
+      const audioOk = (io) => !io || (io.encoding === "linear16" && (!io.container || io.container === "none"));
+      if (!audioOk(settings.audio?.input) || !audioOk(settings.audio?.output)) {
+        return reject(new Error("This app only supports linear16 audio with no container — re-export from the Playground with that audio setting."));
+      }
+      resolve(settings);
+    }
+    client.on("message", onMessage);
+  });
+}
+
+// A pasted config might bring its own think.prompt (e.g. a generic assistant script exported while
+// testing a different model), but this app exists to run the Character game — so the Character's
+// own compiled prompt (its rules, the filled-in secret figure, etc.) always goes in first. Whatever
+// the pasted config's own prompt says is layered on right after it, not discarded. Handles think as
+// either a single provider object or a fallback array of them.
+function prependGamePrompt(settings, gamePromptText) {
+  const merge = (entry) => {
+    entry = entry && typeof entry === "object" ? entry : {};
+    const pastedPrompt = typeof entry.prompt === "string" ? entry.prompt.trim() : "";
+    return { ...entry, prompt: pastedPrompt ? `${gamePromptText}\n\n${pastedPrompt}` : gamePromptText };
+  };
+  settings.agent.think = Array.isArray(settings.agent.think) && settings.agent.think.length
+    ? settings.agent.think.map(merge)
+    : merge(settings.agent.think);
   return settings;
 }
 
@@ -255,7 +300,6 @@ app.get("/api/config", (_req, res) => {
   res.json({
     sampleRate: SAMPLE_RATE,
     thinkModel: THINK_MODEL,
-    thinkVia: ANTHROPIC_API_KEY ? "your Anthropic key" : "Deepgram-brokered Anthropic",
     deepgramConfigured: Boolean(keys.deepgram),
     anamConfigured: Boolean(keys.anam),
     keyHints: { anam: mask(keys.anam), deepgram: mask(keys.deepgram) },
@@ -267,34 +311,58 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: "/agent" });
 
 // One upstream Deepgram socket per browser socket. Binary frames are audio in both directions;
-// text frames are JSON control/events. The server sends Settings so the prompt and keys never leave it.
-// The browser picks the prompt and fills its fields via the URL: /agent?prompt=<id>&SECRET_FIGURE=...
+// text frames are JSON control/events. The server normally sends Settings itself so the prompt and
+// keys never leave it. The browser always picks a Character and fills its fields via the URL:
+// /agent?prompt=<id>&SECRET_FIGURE=... — with a pasted Playground config, it also adds
+// ?override=1 and sends a ClientSettings message (see receiveClientSettings above) whose
+// think.prompt gets the Character's own compiled prompt prepended (see prependGamePrompt above),
+// so a pasted config can swap models/voices but can never accidentally replace the game itself.
 wss.on("connection", async (client, req) => {
   const params = new URL(req.url, "http://localhost").searchParams;
   const promptEntry = PROMPTS.find((p) => p.id === params.get("prompt")) || PROMPTS[0];
   const values = Object.fromEntries((promptEntry.fields || []).map((f) => [f.key, params.get(f.key) || ""]));
 
-  // Voice must be one Deepgram actually offers; fall back to the .env default if the list can't be fetched.
-  let voice = SPEAK_MODEL;
-  const requested = params.get("voice");
-  if (requested && requested !== SPEAK_MODEL) {
-    try {
-      if ((await listVoices()).some((v) => v.id === requested)) voice = requested;
-      else console.warn(`[session] unknown voice "${requested}", using ${SPEAK_MODEL}`);
-    } catch (err) {
-      console.warn(`[session] could not verify voice: ${err.message}`);
-    }
-  }
-
   let settings;
-  try {
-    settings = buildSettings(promptEntry, values, voice);
-  } catch (err) {
-    client.send(JSON.stringify({ type: "Error", error: err.message }));
-    client.close();
-    return;
+  if (params.get("override") === "1") {
+    let gamePromptText;
+    try {
+      gamePromptText = fillPrompt(promptEntry.text, promptEntry.fields, values);
+    } catch (err) {
+      client.send(JSON.stringify({ type: "Error", error: err.message }));
+      client.close();
+      return;
+    }
+    try {
+      settings = await receiveClientSettings(client);
+    } catch (err) {
+      client.send(JSON.stringify({ type: "Error", error: err.message }));
+      client.close();
+      return;
+    }
+    prependGamePrompt(settings, gamePromptText);
+    console.log(`[session] pasted Playground config, prompt=${promptEntry.id} (game prompt prepended)`);
+  } else {
+    // Voice must be one Deepgram actually offers; fall back to the .env default if the list can't be fetched.
+    let voice = SPEAK_MODEL;
+    const requested = params.get("voice");
+    if (requested && requested !== SPEAK_MODEL) {
+      try {
+        if ((await listVoices()).some((v) => v.id === requested)) voice = requested;
+        else console.warn(`[session] unknown voice "${requested}", using ${SPEAK_MODEL}`);
+      } catch (err) {
+        console.warn(`[session] could not verify voice: ${err.message}`);
+      }
+    }
+
+    try {
+      settings = buildSettings(promptEntry, values, voice);
+    } catch (err) {
+      client.send(JSON.stringify({ type: "Error", error: err.message }));
+      client.close();
+      return;
+    }
+    console.log(`[session] prompt=${promptEntry.id} voice=${voice}${Object.keys(values).length ? " " + JSON.stringify(values) : ""}`);
   }
-  console.log(`[session] prompt=${promptEntry.id} voice=${voice}${Object.keys(values).length ? " " + JSON.stringify(values) : ""}`);
 
   const upstream = new WebSocket(DEEPGRAM_AGENT_URL, {
     headers: { Authorization: `Token ${keys.deepgram}` },
@@ -320,8 +388,10 @@ wss.on("connection", async (client, req) => {
       try {
         const msg = JSON.parse(data.toString());
         if (msg.type === "Error" || msg.type === "Warning") console.warn("[deepgram]", msg);
-        // Kickoff: once settings are live, nudge the LLM with a hidden user message so it opens in character.
-        if (msg.type === "SettingsApplied" && promptEntry.kickoff) {
+        // Kickoff: once settings are live, nudge the LLM with a hidden user message so it opens in
+        // character. Skipped when the outbound settings already carry their own agent.greeting (a
+        // pasted config can set one) — the two are mutually exclusive, or the agent opens twice.
+        if (msg.type === "SettingsApplied" && promptEntry.kickoff && !settings.agent.greeting) {
           hideKickoffEcho = true;
           upstream.send(JSON.stringify({ type: "InjectUserMessage", content: promptEntry.kickoff }));
         }

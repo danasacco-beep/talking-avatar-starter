@@ -35,7 +35,6 @@ set `ANAM_API_KEY` and `DEEPGRAM_API_KEY`. The page picks them up on the next st
 | --- | --- |
 | `DEEPGRAM_API_KEY` | STT, TTS, and the brokered Claude call. Can be pasted on the page instead. |
 | `THINK_MODEL` | Claude model. Brokered by Deepgram: `claude-sonnet-5`, `claude-sonnet-4-6`, `claude-haiku-4-5`. |
-| `ANTHROPIC_API_KEY` | Optional. If set, Deepgram calls Anthropic with your key instead, so any model works (e.g. `claude-opus-5`). |
 | `ANAM_API_KEY` | Avatar rendering. Can be pasted on the page instead. |
 | `ANAM_AVATAR_ID` | Stock avatar. List more with `curl -H "Authorization: Bearer $ANAM_API_KEY" https://api.anam.ai/v1/avatars`. |
 | `SPEAK_MODEL` / `LISTEN_MODEL` | Deepgram TTS voice and STT model. Default to Flux (`flux-kit-en` / `flux-general-en`); set to an Aura voice (e.g. `aura-2-thalia-en`) or Nova model (e.g. `nova-3`) to opt out of Flux. Both are only the initial defaults — the page's Voice dropdown lets you override `SPEAK_MODEL` per session. |
@@ -63,9 +62,38 @@ Pick a character from the **Character** dropdown before clicking Start. Prompts 
 | Mystery guest | `prompts/mystery-guest.md` | Needs a **Secret figure** (e.g. Leonardo da Vinci). The character opens in voice and won't reveal its name until you guess it. |
 
 `prompts/index.json` describes each one: `file`, optional `greeting` (spoken verbatim), optional `kickoff`
-(a hidden nudge so the LLM writes its own opening), and optional `fields` (placeholders like `[SECRET_FIGURE …]`
-that the page asks you to fill in). Add a new `.md` file plus an index entry to add a character; prompts are
-re-read on every page load, so no restart is needed.
+(a hidden nudge so the LLM writes its own opening), optional `fields` (placeholders like `[SECRET_FIGURE …]`
+that the page asks you to fill in), and optional `secret: true` on a field to mask it like a password (with a
+show/hide toggle) so it doesn't spoil the game for anyone reading over the setter's shoulder. Add a new `.md`
+file plus an index entry to add a character; prompts are re-read on every page load, so no restart is needed.
+
+## Advanced: paste a Playground config
+
+The **Advanced** card at the bottom of the right-hand column takes a full `Settings` JSON payload — the kind
+you get by configuring and exporting a session from [Deepgram's Playground](https://playground.deepgram.com) —
+and uses it instead of the **Voice** select above. Paste it in and click **Apply config**; the Voice select
+greys out to make clear it's no longer in effect, and **Clear** switches back. This is a drop-in path for
+anyone who designed a config in the Playground (any managed `think` provider — `anthropic`, `open_ai`,
+`google`, etc. — plus any Deepgram `speak`/`listen` model) and just wants to hear it running through the avatar,
+no editing required.
+
+**The Character card is never overridden.** Whatever character is selected (and its filled-in fields, e.g. the
+secret figure) still has its prompt compiled server-side exactly as normal, and that compiled prompt is always
+prepended to the pasted config's own `think.prompt` — the pasted text is layered on after it, not instead of it.
+A pasted config can swap models and voices, but it can't make the app stop running the game; even a fully
+generic assistant prompt exported from the Playground still refuses to give up the mystery figure's identity
+when asked directly, because the game's rules are always there first. The one exception is `agent.greeting`: if
+the pasted config sets one, that literal spoken line plays first (a fixed greeting and a system prompt are
+independent), so the very first thing you hear can still sound generic before the character voice takes over
+from the first real exchange onward.
+
+Two constraints, both enforced with a clear error rather than a silent failure: the JSON must have
+`"type": "Settings"` and an `agent` object, and `audio.input`/`audio.output` must use `encoding: "linear16"`
+with no `container` — this app's mic capture and Anam playback pipeline don't support compressed or
+containerized audio. Differing input/output sample rates (e.g. 48 kHz in, 24 kHz out) are handled automatically.
+The pasted JSON is sent from the browser to the server as the first WebSocket message once you click **Start**;
+the server prepends the Character's prompt and relays the rest to Deepgram unmodified — none of it gets written
+to `.env` or persisted anywhere.
 
 ## Agent prompt
 
@@ -78,8 +106,10 @@ Click the ⛶ button on the avatar, double-click the video, or press **F**. Esc 
 ## How the pieces fit
 
 - `server.js` serves the page, mints Anam session tokens with `enableAudioPassthrough: true`, and proxies the
-  browser's WebSocket to `wss://agent.deepgram.com/v1/agent/converse`. It injects the `Settings` message
-  itself, so the prompt and both API keys never reach the browser.
+  browser's WebSocket to `wss://agent.deepgram.com/v1/agent/converse`. For the built-in character prompts, it
+  injects the `Settings` message itself, so the prompt and both API keys never reach the browser. A pasted
+  Playground config is the one exception: the browser already has that whole JSON (the user pasted it), so it
+  sends it as the first WebSocket message and the server relays it upstream as-is instead of building its own.
 - `public/app.js` captures the mic with an AudioWorklet (16 kHz PCM16), forwards it to the proxy, and pushes
   Deepgram's TTS audio into the Anam stream. `UserStartedSpeaking` triggers `interruptPersona()` for barge-in;
   `AgentAudioDone` calls `endSequence()` to close the turn.

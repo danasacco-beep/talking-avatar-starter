@@ -23,6 +23,11 @@ const els = {
   saveKeys: document.getElementById("saveKeys"),
   keysState: document.getElementById("keysState"),
   keysMsg: document.getElementById("keysMsg"),
+  voiceRow: document.getElementById("voiceRow"),
+  rawConfigInput: document.getElementById("rawConfig"),
+  applyConfig: document.getElementById("applyConfig"),
+  clearConfig: document.getElementById("clearConfig"),
+  configMsg: document.getElementById("configMsg"),
 };
 let keysReady = false;
 
@@ -151,19 +156,45 @@ function renderPromptFields() {
     input.required = Boolean(f.required);
     try { input.value = localStorage.getItem(`field:${entry.id}:${f.key}`) || ""; } catch {}
     input.oninput = () => { try { localStorage.setItem(`field:${entry.id}:${f.key}`, input.value); } catch {} };
-    label.appendChild(input);
+    if (f.secret) {
+      // Masked like a password field so whoever is setting this up doesn't spoil it for the
+      // player reading over their shoulder; the eye button lets them double-check what they typed.
+      input.type = "password";
+      const wrap = document.createElement("div");
+      wrap.className = "secret-field";
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "small";
+      toggle.textContent = "👁";
+      toggle.setAttribute("aria-label", "Show");
+      toggle.onclick = () => {
+        const showing = input.type === "text";
+        input.type = showing ? "password" : "text";
+        toggle.textContent = showing ? "👁" : "🙈";
+        toggle.setAttribute("aria-label", showing ? "Show" : "Hide");
+      };
+      wrap.append(input, toggle);
+      label.appendChild(wrap);
+    } else {
+      label.appendChild(input);
+    }
     els.promptFields.appendChild(label);
   }
 }
 
-// Build the /agent URL that tells the server which prompt to use and what to fill in.
+// Build the /agent URL. The Character prompt/fields are always sent and always validated — even
+// with a pasted config active, the server prepends that compiled prompt to whatever the config's
+// own prompt says, so a pasted config can never accidentally replace the game. A pasted config only
+// adds ?override=1, which tells the server to wait for it as the first WebSocket message and use
+// its model/voice/audio settings instead of the Voice dropdown's.
 function agentUrl() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const url = new URL(`${proto}://${location.host}/agent`);
+  if (pastedConfig) url.searchParams.set("override", "1");
   url.searchParams.set("prompt", els.prompt.value);
   if (els.voice.value) url.searchParams.set("voice", els.voice.value);
   for (const input of els.promptFields.querySelectorAll("input")) {
-    if (input.required && !input.value.trim()) throw new Error(`Please fill in "${input.parentElement.firstChild.textContent}" first.`);
+    if (input.required && !input.value.trim()) throw new Error(`Please fill in "${input.closest("label").firstChild.textContent}" first.`);
     url.searchParams.set(input.name, input.value.trim());
   }
   return url.toString();
@@ -171,11 +202,71 @@ function agentUrl() {
 
 let anamClient, audioInputStream, ws, audioCtx, micStream, workletNode;
 let sampleRate = 16000;
+let lastCfg = null;
+// The parsed Settings object from a pasted Deepgram Playground config, or null for the normal
+// Voice-dropdown flow. When set, it replaces the Voice/model/audio settings for the next session —
+// but never the Character prompt; the server always prepends that (see agentUrl and server.js).
+let pastedConfig = null;
 
 function setStatus(text, kind = "") {
   els.status.textContent = text;
   els.status.className = `status ${kind}`;
 }
+
+function updateMetaLine() {
+  if (pastedConfig) {
+    const think = Array.isArray(pastedConfig.agent?.think) ? pastedConfig.agent.think[0] : pastedConfig.agent?.think;
+    const model = think?.provider?.model || think?.provider?.type || "custom";
+    els.meta.textContent = `LLM: ${model} (pasted config)`;
+  } else {
+    els.meta.textContent = `LLM: ${lastCfg?.thinkModel || "…"}`;
+  }
+}
+
+// A pasted config carries its own model and voice, so the Voice select would otherwise sit there
+// looking editable while being silently ignored — grey it out. The Character card stays live: its
+// compiled prompt (and the secret figure you set) always gets prepended server-side, so it's never
+// optional, override or not.
+function setConfigOverrideActive(active) {
+  els.voiceRow.classList.toggle("disabled-by-config", active);
+  for (const el of els.voiceRow.querySelectorAll("select, button")) el.disabled = active;
+  els.clearConfig.hidden = !active;
+  updateMetaLine();
+}
+
+// Basic sanity checks so a bad paste fails with a clear message instead of a confusing runtime
+// error later. Deepgram's own validation catches everything else once the session connects.
+function parseRawConfig(text) {
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { throw new Error("That's not valid JSON — check for a missing comma or bracket."); }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Expected a JSON object, not a list or plain value.");
+  if (!parsed.agent || typeof parsed.agent !== "object") throw new Error('Missing "agent" — this doesn\'t look like a Voice Agent Settings payload.');
+  const audioOk = (io) => !io || (io.encoding === "linear16" && (!io.container || io.container === "none"));
+  if (!audioOk(parsed.audio?.input) || !audioOk(parsed.audio?.output)) {
+    throw new Error("This app only supports linear16 audio with no container — re-export from the Playground with that audio setting.");
+  }
+  return parsed;
+}
+
+els.applyConfig.onclick = () => {
+  try {
+    pastedConfig = parseRawConfig(els.rawConfigInput.value);
+    try { localStorage.setItem("rawConfig", els.rawConfigInput.value); } catch {}
+    els.configMsg.textContent = "Applied — Start conversation will use this instead of the Voice setting above (the Character prompt is always kept).";
+    els.configMsg.className = "keys-msg ok";
+  } catch (err) {
+    pastedConfig = null;
+    els.configMsg.textContent = err.message;
+    els.configMsg.className = "keys-msg error";
+  }
+  setConfigOverrideActive(Boolean(pastedConfig));
+};
+els.clearConfig.onclick = () => {
+  pastedConfig = null;
+  els.configMsg.textContent = "";
+  els.configMsg.className = "keys-msg";
+  setConfigOverrideActive(false);
+};
 
 function addLine(role, text) {
   const row = document.createElement("div");
@@ -189,7 +280,8 @@ function addLine(role, text) {
 async function loadConfig() {
   const cfg = await fetch("/api/config").then((r) => r.json());
   sampleRate = cfg.sampleRate;
-  els.meta.textContent = `LLM: ${cfg.thinkModel} (${cfg.thinkVia})`;
+  lastCfg = cfg;
+  updateMetaLine();
   showKeyState(cfg);
   if (!keysReady) setStatus("Add your API keys to begin", "muted");
   prompts = cfg.prompts;
@@ -202,6 +294,9 @@ async function loadConfig() {
   }
   try { const saved = localStorage.getItem("prompt"); if (prompts.some((p) => p.id === saved)) els.prompt.value = saved; } catch {}
   renderPromptFields();
+  // Restore whatever was last pasted so it's not lost on refresh, but require a fresh click on
+  // Apply before it takes effect — silently re-activating an override isn't the safer default.
+  try { els.rawConfigInput.value = localStorage.getItem("rawConfig") || ""; } catch {}
   return cfg;
 }
 
@@ -217,7 +312,9 @@ async function startAvatar() {
   await anamClient.streamToVideoElement("avatar");
   audioInputStream = anamClient.createAgentAudioInputStream({
     encoding: "pcm_s16le",
-    sampleRate,
+    // A pasted config can declare its own output sample rate (e.g. Flux TTS at 24 kHz); Anam's
+    // playback stream has to match whatever Deepgram is actually about to send, not our default.
+    sampleRate: pastedConfig?.audio?.output?.sample_rate || sampleRate,
     channels: 1,
   });
 }
@@ -226,7 +323,12 @@ function connectAgent() {
   return new Promise((resolve, reject) => {
     ws = new WebSocket(agentUrl());
     ws.binaryType = "arraybuffer";
-    ws.onopen = () => setStatus("Connected to Deepgram, applying settings…");
+    ws.onopen = () => {
+      // In override mode this is the very first thing sent, before any mic audio — the server
+      // waits for it and relays it to Deepgram in place of its own built-in Settings.
+      if (pastedConfig) ws.send(JSON.stringify({ type: "ClientSettings", settings: pastedConfig }));
+      setStatus("Connected to Deepgram, applying settings…");
+    };
     ws.onerror = () => reject(new Error("WebSocket error"));
     ws.onclose = () => setStatus("Disconnected", "muted");
     ws.onmessage = (ev) => {
@@ -323,7 +425,9 @@ async function startMic() {
     },
   });
   await listMics(); // labels are available now that permission is granted
-  audioCtx = new AudioContext({ sampleRate });
+  // A pasted config can request its own input sample rate (e.g. 48 kHz) — capture at that rate so
+  // it matches what we declared to Deepgram in the ClientSettings/Settings message.
+  audioCtx = new AudioContext({ sampleRate: pastedConfig?.audio?.input?.sample_rate || sampleRate });
   await audioCtx.audioWorklet.addModule("/mic-worklet.js");
   const source = audioCtx.createMediaStreamSource(micStream);
   workletNode = new AudioWorkletNode(audioCtx, "pcm-capture");
