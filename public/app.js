@@ -151,7 +151,28 @@ function renderPromptFields() {
     input.required = Boolean(f.required);
     try { input.value = localStorage.getItem(`field:${entry.id}:${f.key}`) || ""; } catch {}
     input.oninput = () => { try { localStorage.setItem(`field:${entry.id}:${f.key}`, input.value); } catch {} };
-    label.appendChild(input);
+    if (f.secret) {
+      // Masked like a password field so whoever is setting this up doesn't spoil it for the
+      // player reading over their shoulder; the eye button lets them double-check what they typed.
+      input.type = "password";
+      const wrap = document.createElement("div");
+      wrap.className = "secret-field";
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "small";
+      toggle.textContent = "👁";
+      toggle.setAttribute("aria-label", "Show");
+      toggle.onclick = () => {
+        const showing = input.type === "text";
+        input.type = showing ? "password" : "text";
+        toggle.textContent = showing ? "👁" : "🙈";
+        toggle.setAttribute("aria-label", showing ? "Show" : "Hide");
+      };
+      wrap.append(input, toggle);
+      label.appendChild(wrap);
+    } else {
+      label.appendChild(input);
+    }
     els.promptFields.appendChild(label);
   }
 }
@@ -163,7 +184,7 @@ function agentUrl() {
   url.searchParams.set("prompt", els.prompt.value);
   if (els.voice.value) url.searchParams.set("voice", els.voice.value);
   for (const input of els.promptFields.querySelectorAll("input")) {
-    if (input.required && !input.value.trim()) throw new Error(`Please fill in "${input.parentElement.firstChild.textContent}" first.`);
+    if (input.required && !input.value.trim()) throw new Error(`Please fill in "${input.closest("label").firstChild.textContent}" first.`);
     url.searchParams.set(input.name, input.value.trim());
   }
   return url.toString();

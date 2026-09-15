@@ -4,7 +4,7 @@
     "name": "Mystery guest (guess who I am)",
     "file": "mystery-guest.md",
     "fields": [
-      { "key": "SECRET_FIGURE", "label": "Secret figure (set by the other player)", "placeholder": "e.g. Leonardo da Vinci", "required": true }
+      { "key": "SECRET_FIGURE", "label": "Secret figure (set by the other player)", "placeholder": "e.g. Leonardo da Vinci", "required": true, "secret": true }
     ],
     "kickoff": "The player has just arrived. Greet them in character and invite them to discover who you are."
   }
