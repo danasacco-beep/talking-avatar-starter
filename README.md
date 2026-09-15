@@ -5,11 +5,17 @@ through Deepgram's brokered Anthropic access, and synthesizes speech. The speech
 Anam avatar in audio-passthrough mode so the face lip-syncs to it.
 
 ```
-mic ──PCM16──▶ ws /agent ──▶ Deepgram Voice Agent (nova-3 ▸ Claude ▸ aura-2)
+mic ──PCM16──▶ ws /agent ──▶ Deepgram Voice Agent (Flux STT ▸ Claude ▸ Flux TTS)
                                       │ TTS PCM16
 browser ◀─────────────────────────────┘
    └──▶ Anam createAgentAudioInputStream ──▶ lip-synced video + audio (WebRTC)
 ```
+
+STT and TTS both default to [Flux](https://developers.deepgram.com/docs/flux), Deepgram's voice-agent-first
+model family: `flux-general-en` for listening (model-integrated end-of-turn detection instead of a bolted-on
+VAD) and `flux-kit-en` for speaking (turn-based lifecycle, consistent voice across turns). Set `LISTEN_MODEL`
+to a Nova model (e.g. `nova-3`) or `SPEAK_MODEL` to an Aura model (e.g. `aura-2-thalia-en`) in `.env` to fall
+back to the older, non-Flux pipeline — the server switches API versions automatically based on the model name.
 
 ## Setup
 
@@ -32,7 +38,8 @@ set `ANAM_API_KEY` and `DEEPGRAM_API_KEY`. The page picks them up on the next st
 | `ANTHROPIC_API_KEY` | Optional. If set, Deepgram calls Anthropic with your key instead, so any model works (e.g. `claude-opus-5`). |
 | `ANAM_API_KEY` | Avatar rendering. Can be pasted on the page instead. |
 | `ANAM_AVATAR_ID` | Stock avatar. List more with `curl -H "Authorization: Bearer $ANAM_API_KEY" https://api.anam.ai/v1/avatars`. |
-| `SPEAK_MODEL` / `LISTEN_MODEL` | Deepgram voice and STT model. Both are only the initial defaults; the page overrides them. |
+| `SPEAK_MODEL` / `LISTEN_MODEL` | Deepgram TTS voice and STT model. Default to Flux (`flux-kit-en` / `flux-general-en`); set to an Aura voice (e.g. `aura-2-thalia-en`) or Nova model (e.g. `nova-3`) to opt out of Flux. Both are only the initial defaults — the page's Voice dropdown lets you override `SPEAK_MODEL` per session. |
+| `FLUX_EOT_THRESHOLD` / `FLUX_EAGER_EOT_THRESHOLD` / `FLUX_EOT_TIMEOUT_MS` | Optional Flux end-of-turn tuning, only applied when `LISTEN_MODEL` starts with `flux`. See [Flux end-of-turn configuration](https://developers.deepgram.com/docs/flux/configuration). |
 | `PORT` | Defaults to 4400. Set `PORT=4401` if something else already has that port. |
 
 ## Avatars
@@ -43,9 +50,9 @@ choice is remembered. `ANAM_AVATAR_ID` in `.env` is only the initial default.
 
 ## Voices
 
-The **Voice** dropdown lists every Deepgram text-to-speech voice, fetched live from Deepgram's models endpoint
-(about 100, English first, other languages grouped below). The ▶ button plays Deepgram's sample clip for the
-selected voice. `SPEAK_MODEL` in `.env` is only the initial default.
+The **Voice** dropdown lists every Deepgram text-to-speech voice, fetched live from Deepgram's models endpoints
+and grouped Flux first, then Aura English, then Aura's other languages (Flux TTS is English-only). The ▶ button
+plays Deepgram's sample clip for the selected voice. `SPEAK_MODEL` in `.env` is only the initial default.
 
 ## Characters (prompts)
 

@@ -18,8 +18,11 @@ const {
   ANAM_AVATAR_MODEL = "cara-4",
   ANTHROPIC_API_KEY,
   THINK_MODEL = "claude-sonnet-5",
-  SPEAK_MODEL = "aura-2-thalia-en",
-  LISTEN_MODEL = "nova-3",
+  SPEAK_MODEL = "flux-kit-en",
+  LISTEN_MODEL = "flux-general-en",
+  FLUX_EOT_THRESHOLD,
+  FLUX_EAGER_EOT_THRESHOLD,
+  FLUX_EOT_TIMEOUT_MS,
   PORT = 4400,
 } = process.env;
 
@@ -79,6 +82,15 @@ function buildSettings(promptEntry, values, voice = SPEAK_MODEL) {
       headers: { "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
     };
   }
+  // Flux STT (flux-general-en / flux-general-multi) runs on the v2 API and adds model-integrated
+  // end-of-turn detection; Nova models stay on v1 with none of the eot_* tuning fields.
+  const listenProvider = { type: "deepgram", model: LISTEN_MODEL };
+  if (LISTEN_MODEL.startsWith("flux")) {
+    listenProvider.version = "v2";
+    if (FLUX_EOT_THRESHOLD) listenProvider.eot_threshold = Number(FLUX_EOT_THRESHOLD);
+    if (FLUX_EAGER_EOT_THRESHOLD) listenProvider.eager_eot_threshold = Number(FLUX_EAGER_EOT_THRESHOLD);
+    if (FLUX_EOT_TIMEOUT_MS) listenProvider.eot_timeout_ms = Number(FLUX_EOT_TIMEOUT_MS);
+  }
   const settings = {
     type: "Settings",
     audio: {
@@ -87,12 +99,12 @@ function buildSettings(promptEntry, values, voice = SPEAK_MODEL) {
     },
     agent: {
       language: "en",
-      listen: { provider: { type: "deepgram", model: LISTEN_MODEL } },
+      listen: { provider: listenProvider },
       think,
       speak: { provider: { type: "deepgram", model: voice } },
     },
   };
-  // Flux TTS voices are the v2 API; Aura voices default to v1 when version is omitted.
+  // Flux TTS voices (flux-{voice}-{lang}) are the v2 API; Aura voices (aura-2-...) default to v1 when version is omitted.
   if (voice.startsWith("flux")) settings.agent.speak.provider.version = "v2";
   if (promptEntry.greeting) settings.agent.greeting = promptEntry.greeting;
   return settings;
@@ -132,29 +144,45 @@ async function listAvatars() {
   return list;
 }
 
-// Deepgram TTS voices, from its models endpoint so new voices show up without a code change.
+// Deepgram TTS voices. Aura lives on /v1/models; Flux TTS (flux-{voice}-{lang}) is a separate
+// catalog on /v2/models and never appears in /v1/models, so both must be fetched and merged.
 let voiceCache = { at: 0, list: [] };
+function toVoiceOption(m, group) {
+  const meta = m.metadata || {};
+  const lang = (m.languages || [])[0] || "";
+  const gender = (meta.tags || []).find((t) => t === "feminine" || t === "masculine") || "";
+  const display = meta.display_name || m.name.replace(/^\w/, (c) => c.toUpperCase());
+  const bits = [meta.accent, gender].filter(Boolean).join(", ");
+  return {
+    id: m.canonical_name,
+    name: `${display}${bits ? ` — ${bits}` : ""}${lang && !lang.startsWith("en") ? ` (${lang})` : ""}`,
+    lang,
+    architecture: m.architecture,
+    group,
+    sample: meta.sample || null,
+  };
+}
 async function listVoices() {
   if (Date.now() - voiceCache.at < 10 * 60 * 1000 && voiceCache.list.length) return voiceCache.list;
-  const r = await fetch("https://api.deepgram.com/v1/models", { headers: { Authorization: `Token ${keys.deepgram}` } });
-  if (!r.ok) throw new Error(`Deepgram models ${r.status}: ${await r.text()}`);
-  const body = await r.json();
-  const list = (body.tts || []).map((m) => {
-    const meta = m.metadata || {};
-    const lang = (m.languages || [])[0] || "";
-    const gender = (meta.tags || []).find((t) => t === "feminine" || t === "masculine") || "";
-    const display = meta.display_name || m.name.replace(/^\w/, (c) => c.toUpperCase());
-    const bits = [meta.accent, gender].filter(Boolean).join(", ");
-    return {
-      id: m.canonical_name,
-      name: `${display}${bits ? ` — ${bits}` : ""}${lang && !lang.startsWith("en") ? ` (${lang})` : ""}`,
-      lang,
-      architecture: m.architecture,
-      sample: meta.sample || null,
-    };
-  });
-  // English voices first (the agent's STT language is English), then everything else alphabetically.
-  list.sort((a, b) => (b.lang.startsWith("en") - a.lang.startsWith("en")) || a.name.localeCompare(b.name));
+  const headers = { Authorization: `Token ${keys.deepgram}` };
+  const [auraRes, fluxRes] = await Promise.all([
+    fetch("https://api.deepgram.com/v1/models", { headers }),
+    fetch("https://api.deepgram.com/v2/models", { headers }),
+  ]);
+  if (!auraRes.ok) throw new Error(`Deepgram models ${auraRes.status}: ${await auraRes.text()}`);
+  if (!fluxRes.ok) throw new Error(`Deepgram v2 models ${fluxRes.status}: ${await fluxRes.text()}`);
+  const [auraBody, fluxBody] = await Promise.all([auraRes.json(), fluxRes.json()]);
+
+  const flux = (fluxBody.tts || []).map((m) => toVoiceOption(m, "Flux (recommended)"));
+  const auraEnglish = [];
+  const auraOther = [];
+  for (const m of auraBody.tts || []) {
+    const isEnglish = ((m.languages || [])[0] || "").startsWith("en");
+    (isEnglish ? auraEnglish : auraOther).push(toVoiceOption(m, isEnglish ? "Aura — English" : "Aura — Other languages"));
+  }
+  for (const group of [flux, auraEnglish, auraOther]) group.sort((a, b) => a.name.localeCompare(b.name));
+
+  const list = [...flux, ...auraEnglish, ...auraOther];
   voiceCache = { at: Date.now(), list };
   return list;
 }
