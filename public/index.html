@@ -80,6 +80,7 @@
     #start { flex: 1; padding: 15px 20px; font-size: 16.5px; }
     #stop { padding: 15px 20px; font-size: 15px; background: var(--danger); }
     .hint { color: var(--muted); font-size: 12.5px; }
+    .hint a { color: var(--accent); }
 
     /* ---- cards ---- */
     .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 16px; }
@@ -114,6 +115,14 @@
     #promptFields .secret-field { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
     #promptFields .secret-field input { margin-top: 0; }
     #promptFields .secret-field button { flex: 0 0 auto; padding: 8px 11px; font-size: 15px; }
+    #rawConfig {
+      width: 100%; min-height: 130px; margin-top: 2px; padding: 9px 10px; border-radius: 8px; resize: vertical;
+      background: var(--field); color: var(--text); border: 1px solid var(--line);
+      font: 400 12px ui-monospace, Menlo, monospace;
+    }
+    /* A pasted Playground config fully replaces the Voice/Character choices above, so grey those
+       controls out rather than leave them clickable but silently ignored. */
+    .disabled-by-config { opacity: .4; pointer-events: none; }
 
     /* ---- mic level ---- */
     .level { height: 7px; background: var(--field); border-radius: 4px; margin-top: 12px; overflow: hidden; }
@@ -179,7 +188,7 @@
       <section class="card">
         <div class="card-head"><span class="num">2</span><strong>Look and voice</strong></div>
         <label class="row" for="avatar-select"><span>Avatar</span><select id="avatar-select"><option value="">Loading avatars…</option></select></label>
-        <div class="row with-btn">
+        <div class="row with-btn" id="voiceRow">
           <label for="voice">Voice</label>
           <select id="voice"><option value="">Loading voices…</option></select>
           <button id="preview" class="small" title="Hear a sample of this voice">▶</button>
@@ -190,6 +199,21 @@
         <div class="card-head"><span class="num">3</span><strong>Character</strong></div>
         <label class="row" for="prompt"><span>Character</span><select id="prompt"></select></label>
         <div id="promptFields"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><strong>Advanced: paste a config</strong></div>
+        <p class="hint">
+          Exported a config from <a href="https://playground.deepgram.com" target="_blank" rel="noopener">Deepgram's Playground</a>?
+          Paste the whole JSON below and click Apply to use it instead of the Voice setting above. The Character
+          prompt is always kept, so this can't break the game — it only changes which speech and language models run it.
+        </p>
+        <textarea id="rawConfig" placeholder='{ "type": "Settings", "agent": { ... } }'></textarea>
+        <div class="keys-actions">
+          <button id="applyConfig" class="small">Apply config</button>
+          <button id="clearConfig" class="small" hidden>Use settings above instead</button>
+          <span id="configMsg" class="keys-msg"></span>
+        </div>
       </section>
 
       <section class="card">
