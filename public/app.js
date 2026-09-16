@@ -41,7 +41,7 @@ function showKeyState(cfg) {
   keysReady = Boolean(hints.anam && hints.deepgram);
   els.keysState.textContent = keysReady ? "Both keys saved" : hints.anam ? "Deepgram key needed" : hints.deepgram ? "Anam key needed" : "Both keys needed";
   els.keysState.className = `keys-state ${keysReady ? "ok" : "missing"}`;
-  els.start.disabled = !keysReady;
+  updateStartEnabled();
 }
 
 async function saveKeys() {
@@ -155,7 +155,10 @@ function renderPromptFields() {
     input.placeholder = f.placeholder || "";
     input.required = Boolean(f.required);
     try { input.value = localStorage.getItem(`field:${entry.id}:${f.key}`) || ""; } catch {}
-    input.oninput = () => { try { localStorage.setItem(`field:${entry.id}:${f.key}`, input.value); } catch {} };
+    input.oninput = () => {
+      try { localStorage.setItem(`field:${entry.id}:${f.key}`, input.value); } catch {}
+      updateStartEnabled();
+    };
     if (f.secret) {
       // Masked like a password field so whoever is setting this up doesn't spoil it for the
       // player reading over their shoulder; the eye button lets them double-check what they typed.
@@ -180,6 +183,15 @@ function renderPromptFields() {
     }
     els.promptFields.appendChild(label);
   }
+  updateStartEnabled();
+}
+
+// Start is only enabled once both keys are saved and every required Character field (e.g.
+// SECRET_FIGURE) has a value — agentUrl() below still throws as a safety net, but disabling the
+// button is the visible signal instead of a click that silently does nothing.
+function updateStartEnabled() {
+  const fieldsOk = [...els.promptFields.querySelectorAll("input")].every((i) => !i.required || i.value.trim());
+  els.start.disabled = !keysReady || !fieldsOk;
 }
 
 // Build the /agent URL. The Character prompt/fields are always sent and always validated — even
@@ -468,7 +480,7 @@ async function stop() {
   els.video.srcObject = null;
   showAvatarPreview(); // bring the portrait back once the live stream is gone
   els.levelBar.style.width = "0";
-  els.start.disabled = !keysReady;
+  updateStartEnabled();
   setStatus("Stopped", "muted");
 }
 
