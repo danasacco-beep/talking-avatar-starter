@@ -120,6 +120,11 @@
       background: var(--field); color: var(--text); border: 1px solid var(--line);
       font: 400 12px ui-monospace, Menlo, monospace;
     }
+    #promptText {
+      width: 100%; min-height: 220px; margin-top: 6px; padding: 9px 10px; border-radius: 8px; resize: vertical;
+      background: var(--field); color: var(--text); border: 1px solid var(--line);
+      font: 400 13px var(--font);
+    }
     /* A pasted Playground config fully replaces the Voice/Character choices above, so grey those
        controls out rather than leave them clickable but silently ignored. */
     .disabled-by-config { opacity: .4; pointer-events: none; }
@@ -199,6 +204,13 @@
         <div class="card-head"><span class="num">3</span><strong>Character</strong></div>
         <label class="row" for="prompt"><span>Character</span><select id="prompt"></select></label>
         <div id="promptFields"></div>
+        <p class="hint">Prompt text — edits save to <code>prompts/&lt;file&gt;.md</code> and apply for everyone loading this page.</p>
+        <textarea id="promptText" spellcheck="false"></textarea>
+        <div class="keys-actions">
+          <button id="savePrompt" class="small">Save prompt</button>
+          <span id="promptMsg" class="keys-msg"></span>
+          <span id="promptCount" class="keys-msg"></span>
+        </div>
       </section>
 
       <section class="card">

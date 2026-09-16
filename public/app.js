@@ -28,6 +28,10 @@ const els = {
   applyConfig: document.getElementById("applyConfig"),
   clearConfig: document.getElementById("clearConfig"),
   configMsg: document.getElementById("configMsg"),
+  promptText: document.getElementById("promptText"),
+  savePrompt: document.getElementById("savePrompt"),
+  promptMsg: document.getElementById("promptMsg"),
+  promptCount: document.getElementById("promptCount"),
 };
 let keysReady = false;
 
@@ -194,6 +198,51 @@ function updateStartEnabled() {
   els.start.disabled = !keysReady || !fieldsOk;
 }
 
+function renderPromptText() {
+  const entry = prompts.find((p) => p.id === els.prompt.value);
+  els.promptText.value = entry?.text || "";
+  els.promptMsg.textContent = "";
+  els.promptMsg.className = "keys-msg";
+  updatePromptCount();
+}
+
+function updatePromptCount() {
+  const n = els.promptText.value.length;
+  els.promptCount.textContent = `${n.toLocaleString()} / 25,000 characters`;
+  els.promptCount.className = `keys-msg${n > 25000 ? " error" : ""}`;
+}
+
+async function savePrompt() {
+  const id = els.prompt.value;
+  const text = els.promptText.value;
+  if (!text.trim()) {
+    els.promptMsg.textContent = "Prompt text can't be empty.";
+    els.promptMsg.className = "keys-msg error";
+    return;
+  }
+  els.savePrompt.disabled = true;
+  els.promptMsg.textContent = "Saving…";
+  els.promptMsg.className = "keys-msg";
+  try {
+    const r = await fetch(`/api/prompts/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || r.statusText);
+    const entry = prompts.find((p) => p.id === id);
+    if (entry) entry.text = text; // keep the in-memory copy in sync
+    els.promptMsg.textContent = "Saved — prompts/*.md updated for everyone.";
+    els.promptMsg.className = "keys-msg ok";
+  } catch (err) {
+    els.promptMsg.textContent = err.message;
+    els.promptMsg.className = "keys-msg error";
+  } finally {
+    els.savePrompt.disabled = false;
+  }
+}
+
 // Build the /agent URL. The Character prompt/fields are always sent and always validated — even
 // with a pasted config active, the server prepends that compiled prompt to whatever the config's
 // own prompt says, so a pasted config can never accidentally replace the game. A pasted config only
@@ -306,6 +355,7 @@ async function loadConfig() {
   }
   try { const saved = localStorage.getItem("prompt"); if (prompts.some((p) => p.id === saved)) els.prompt.value = saved; } catch {}
   renderPromptFields();
+  renderPromptText();
   // Restore whatever was last pasted so it's not lost on refresh, but require a fresh click on
   // Apply before it takes effect — silently re-activating an override isn't the safer default.
   try { els.rawConfigInput.value = localStorage.getItem("rawConfig") || ""; } catch {}
@@ -511,7 +561,10 @@ els.avatarSelect.onchange = () => {
 els.prompt.onchange = () => {
   try { localStorage.setItem("prompt", els.prompt.value); } catch {}
   renderPromptFields();
+  renderPromptText();
 };
+els.promptText.oninput = updatePromptCount;
+els.savePrompt.onclick = savePrompt;
 // Fullscreen: the stage wrapper goes fullscreen (not the bare video) so the toggle button stays reachable.
 const stage = document.getElementById("stage");
 function toggleFullscreen() {
