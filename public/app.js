@@ -28,6 +28,10 @@ const els = {
   applyConfig: document.getElementById("applyConfig"),
   clearConfig: document.getElementById("clearConfig"),
   configMsg: document.getElementById("configMsg"),
+  promptText: document.getElementById("promptText"),
+  savePrompt: document.getElementById("savePrompt"),
+  promptMsg: document.getElementById("promptMsg"),
+  promptCount: document.getElementById("promptCount"),
 };
 let keysReady = false;
 
@@ -41,7 +45,7 @@ function showKeyState(cfg) {
   keysReady = Boolean(hints.anam && hints.deepgram);
   els.keysState.textContent = keysReady ? "Both keys saved" : hints.anam ? "Deepgram key needed" : hints.deepgram ? "Anam key needed" : "Both keys needed";
   els.keysState.className = `keys-state ${keysReady ? "ok" : "missing"}`;
-  els.start.disabled = !keysReady;
+  updateStartEnabled();
 }
 
 async function saveKeys() {
@@ -155,7 +159,10 @@ function renderPromptFields() {
     input.placeholder = f.placeholder || "";
     input.required = Boolean(f.required);
     try { input.value = localStorage.getItem(`field:${entry.id}:${f.key}`) || ""; } catch {}
-    input.oninput = () => { try { localStorage.setItem(`field:${entry.id}:${f.key}`, input.value); } catch {} };
+    input.oninput = () => {
+      try { localStorage.setItem(`field:${entry.id}:${f.key}`, input.value); } catch {}
+      updateStartEnabled();
+    };
     if (f.secret) {
       // Masked like a password field so whoever is setting this up doesn't spoil it for the
       // player reading over their shoulder; the eye button lets them double-check what they typed.
@@ -179,6 +186,60 @@ function renderPromptFields() {
       label.appendChild(input);
     }
     els.promptFields.appendChild(label);
+  }
+  updateStartEnabled();
+}
+
+// Start is only enabled once both keys are saved and every required Character field (e.g.
+// SECRET_FIGURE) has a value — agentUrl() below still throws as a safety net, but disabling the
+// button is the visible signal instead of a click that silently does nothing.
+function updateStartEnabled() {
+  const fieldsOk = [...els.promptFields.querySelectorAll("input")].every((i) => !i.required || i.value.trim());
+  els.start.disabled = !keysReady || !fieldsOk;
+}
+
+function renderPromptText() {
+  const entry = prompts.find((p) => p.id === els.prompt.value);
+  els.promptText.value = entry?.text || "";
+  els.promptMsg.textContent = "";
+  els.promptMsg.className = "keys-msg";
+  updatePromptCount();
+}
+
+function updatePromptCount() {
+  const n = els.promptText.value.length;
+  els.promptCount.textContent = `${n.toLocaleString()} / 25,000 characters`;
+  els.promptCount.className = `keys-msg${n > 25000 ? " error" : ""}`;
+}
+
+async function savePrompt() {
+  const id = els.prompt.value;
+  const text = els.promptText.value;
+  if (!text.trim()) {
+    els.promptMsg.textContent = "Prompt text can't be empty.";
+    els.promptMsg.className = "keys-msg error";
+    return;
+  }
+  els.savePrompt.disabled = true;
+  els.promptMsg.textContent = "Saving…";
+  els.promptMsg.className = "keys-msg";
+  try {
+    const r = await fetch(`/api/prompts/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || r.statusText);
+    const entry = prompts.find((p) => p.id === id);
+    if (entry) entry.text = text; // keep the in-memory copy in sync
+    els.promptMsg.textContent = "Saved — prompts/*.md updated for everyone.";
+    els.promptMsg.className = "keys-msg ok";
+  } catch (err) {
+    els.promptMsg.textContent = err.message;
+    els.promptMsg.className = "keys-msg error";
+  } finally {
+    els.savePrompt.disabled = false;
   }
 }
 
@@ -294,6 +355,7 @@ async function loadConfig() {
   }
   try { const saved = localStorage.getItem("prompt"); if (prompts.some((p) => p.id === saved)) els.prompt.value = saved; } catch {}
   renderPromptFields();
+  renderPromptText();
   // Restore whatever was last pasted so it's not lost on refresh, but require a fresh click on
   // Apply before it takes effect — silently re-activating an override isn't the safer default.
   try { els.rawConfigInput.value = localStorage.getItem("rawConfig") || ""; } catch {}
@@ -468,7 +530,7 @@ async function stop() {
   els.video.srcObject = null;
   showAvatarPreview(); // bring the portrait back once the live stream is gone
   els.levelBar.style.width = "0";
-  els.start.disabled = !keysReady;
+  updateStartEnabled();
   setStatus("Stopped", "muted");
 }
 
@@ -499,7 +561,10 @@ els.avatarSelect.onchange = () => {
 els.prompt.onchange = () => {
   try { localStorage.setItem("prompt", els.prompt.value); } catch {}
   renderPromptFields();
+  renderPromptText();
 };
+els.promptText.oninput = updatePromptCount;
+els.savePrompt.onclick = savePrompt;
 // Fullscreen: the stage wrapper goes fullscreen (not the bare video) so the toggle button stays reachable.
 const stage = document.getElementById("stage");
 function toggleFullscreen() {

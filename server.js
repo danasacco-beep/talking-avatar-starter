@@ -295,6 +295,24 @@ app.post("/api/keys", async (req, res) => {
   res.json({ ...result, keyHints: { anam: mask(keys.anam), deepgram: mask(keys.deepgram) } });
 });
 
+// Save an edited Character prompt back to prompts/<file>.md. `id` is resolved against the trusted
+// in-memory PROMPTS array only — never used to build a filename from client input — so this can't
+// introduce a path-traversal vector even though nothing else in this file guards against one.
+app.post("/api/prompts/:id", (req, res) => {
+  const entry = PROMPTS.find((p) => p.id === req.params.id);
+  if (!entry) return res.status(404).json({ error: "Unknown character id" });
+  const text = req.body?.text;
+  if (typeof text !== "string" || !text.trim()) {
+    return res.status(400).json({ error: "Prompt text can't be empty." });
+  }
+  if (text.length > 25000) {
+    return res.status(400).json({ error: `Prompt is ${text.length.toLocaleString()} characters; Deepgram's limit is 25,000.` });
+  }
+  fs.writeFileSync(path.join(PROMPTS_DIR, entry.file), text);
+  PROMPTS = loadPrompts(); // same reload GET /api/config already does — one source of truth, disk
+  res.json({ ok: true, length: text.length });
+});
+
 app.get("/api/config", (_req, res) => {
   PROMPTS = loadPrompts(); // re-read on page load so prompt edits don't need a restart
   res.json({
@@ -303,7 +321,7 @@ app.get("/api/config", (_req, res) => {
     deepgramConfigured: Boolean(keys.deepgram),
     anamConfigured: Boolean(keys.anam),
     keyHints: { anam: mask(keys.anam), deepgram: mask(keys.deepgram) },
-    prompts: PROMPTS.map(({ id, name, fields = [] }) => ({ id, name, fields })),
+    prompts: PROMPTS.map(({ id, name, fields = [], text }) => ({ id, name, fields, text })),
   });
 });
 
